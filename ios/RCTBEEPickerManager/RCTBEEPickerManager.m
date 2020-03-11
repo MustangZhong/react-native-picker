@@ -34,7 +34,7 @@
 
 RCT_EXPORT_MODULE();
 
-RCT_EXPORT_METHOD(_init:(NSDictionary *)indic){
+RCT_EXPORT_METHOD(_init:(NSDictionary *)indic resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject){
 
     dispatch_async(dispatch_get_main_queue(), ^{
         [[UIApplication sharedApplication].keyWindow endEditing:YES];
@@ -57,6 +57,7 @@ RCT_EXPORT_METHOD(_init:(NSDictionary *)indic){
     NSString *pickerFontFamily=[NSString stringWithFormat:@"%@",indic[@"pickerFontFamily"]];
     NSArray *pickerFontColor=indic[@"pickerFontColor"];
     NSString *pickerRowHeight=indic[@"pickerRowHeight"];
+    NSString *pickerHeight=indic[@"iosPickerHeight"];
     id pickerData=indic[@"pickerData"];
 
     NSMutableDictionary *dataDic=[[NSMutableDictionary alloc]init];
@@ -75,7 +76,7 @@ RCT_EXPORT_METHOD(_init:(NSDictionary *)indic){
     }];
 
     if ([[UIDevice currentDevice].systemVersion doubleValue] >= 9.0 ) {
-        self.height=250;
+        self.height=[pickerHeight integerValue];
     }else{
         self.height=220;
     }
@@ -85,8 +86,7 @@ RCT_EXPORT_METHOD(_init:(NSDictionary *)indic){
     _pick.bolock=^(NSDictionary *backinfoArry){
 
         dispatch_async(dispatch_get_main_queue(), ^{
-
-            [self.bridge.eventDispatcher sendAppEventWithName:@"pickerEvent" body:backinfoArry];
+            resolve(backinfoArry);
         });
     };
 
@@ -120,7 +120,9 @@ RCT_EXPORT_METHOD(hide){
         });
     }
 
-    self.pick.hidden=YES;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        self.pick.hidden=YES;
+    });
 
     return;
 }
@@ -130,6 +132,7 @@ RCT_EXPORT_METHOD(select: (NSArray*)data){
     if (self.pick) {
         dispatch_async(dispatch_get_main_queue(), ^{
             _pick.selectValueArry = data;
+            _pick.backArry = data;
             [_pick selectRow];
         });
     }return;

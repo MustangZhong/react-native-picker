@@ -27,7 +27,9 @@ const options = {
     onPickerSelect(){},
     pickerToolBarFontSize: 16,
     pickerFontSize: 16,
-    pickerFontColor: [31, 31 ,31, 1]
+    pickerFontColor: [31, 31 ,31, 1],
+    iosPickerHeight: 250,
+    androidItemsVisibleCount: 9
 };
 
 export default {
@@ -42,12 +44,19 @@ export default {
             select: opt.onPickerSelect
         };
 
-        Picker._init(opt);
+        Picker._init(opt)
+            .then(event => {
+                fnConf[event['type']](event['selectedValue'], event['selectedIndex']);
+                this.listener && this.listener.remove();
+            })
+            .catch(error => {
+                console.log(error);
+            });
         //there are no `removeListener` for NativeAppEventEmitter & DeviceEventEmitter
-        this.listener && this.listener.remove();
-        this.listener = NativeAppEventEmitter.addListener('pickerEvent', event => {
-            fnConf[event['type']](event['selectedValue'], event['selectedIndex']);
-        });
+        // this.listener && this.listener.remove();
+        // this.listener = NativeAppEventEmitter.addListener('pickerEvent', event => {
+        // 	fnConf[event['type']](event['selectedValue'], event['selectedIndex']);
+        // });
     },
 
     show(){
@@ -59,10 +68,9 @@ export default {
     },
 
     select(arr, fn) {
-        if(ios){
+        if (ios) {
             Picker.select(arr);
-        }
-        else if(android){
+        } else if (android) {
             Picker.select(arr, err => {
                 typeof fn === 'function' && fn(err);
             });

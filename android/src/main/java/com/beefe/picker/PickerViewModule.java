@@ -6,7 +6,7 @@ import android.app.Dialog;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.Typeface;
-import android.support.annotation.Nullable;
+import androidx.annotation.Nullable;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
@@ -22,6 +22,7 @@ import com.beefe.picker.view.PickerViewAlone;
 import com.beefe.picker.view.PickerViewLinkage;
 import com.beefe.picker.view.ReturnData;
 import com.facebook.react.bridge.Arguments;
+import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.Callback;
 import com.facebook.react.bridge.LifecycleEventListener;
 import com.facebook.react.bridge.ReactApplicationContext;
@@ -33,6 +34,8 @@ import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
+
+import java.lang.ArrayIndexOutOfBoundsException;
 
 import java.util.ArrayList;
 
@@ -77,7 +80,7 @@ import static android.graphics.Color.argb;
  */
 
 public class PickerViewModule extends ReactContextBaseJavaModule implements LifecycleEventListener {
-    
+
     private static final String FONTS = "fonts/";
     private static final String OTF = ".otf";
     private static final String TTF = ".ttf";
@@ -110,6 +113,8 @@ public class PickerViewModule extends ReactContextBaseJavaModule implements Life
     private static final String PICKER_TEXT_SIZE = "pickerFontSize";
     private static final String PICKER_TEXT_ELLIPSIS_LEN = "pickerTextEllipsisLen";
 
+    private static final String PICKER_ITEMS_VISIBLE_COUNT = "androidItemsVisibleCount";
+
     private static final String PICKER_FONT_FAMILY = "pickerFontFamily";
 
     private static final String PICKER_EVENT_NAME = "pickerEvent";
@@ -136,6 +141,7 @@ public class PickerViewModule extends ReactContextBaseJavaModule implements Life
 
     private PickerViewLinkage pickerViewLinkage;
     private PickerViewAlone pickerViewAlone;
+    private Promise promise;
 
     public PickerViewModule(ReactApplicationContext reactContext) {
         super(reactContext);
@@ -148,7 +154,8 @@ public class PickerViewModule extends ReactContextBaseJavaModule implements Life
     }
 
     @ReactMethod
-    public void _init(ReadableMap options) {
+    public void _init(ReadableMap options, Promise promise) {
+        this.promise = promise;
         Activity activity = getCurrentActivity();
         if (activity != null && options.hasKey(PICKER_DATA)) {
             View view = activity.getLayoutInflater().inflate(R.layout.picker_view, null);
@@ -170,6 +177,7 @@ public class PickerViewModule extends ReactContextBaseJavaModule implements Life
             } else {
                 barViewHeight = (int) (activity.getResources().getDisplayMetrics().density * 40);
             }
+
             RelativeLayout.LayoutParams params = new RelativeLayout.LayoutParams(
                     RelativeLayout.LayoutParams.MATCH_PARENT,
                     barViewHeight);
@@ -300,10 +308,30 @@ public class PickerViewModule extends ReactContextBaseJavaModule implements Life
                 }
             }
 
+            int pickerVisibleItemsCount = 9;
+            if (options.hasKey(PICKER_ITEMS_VISIBLE_COUNT)) {
+                try {
+                    pickerVisibleItemsCount = options.getInt(PICKER_ITEMS_VISIBLE_COUNT);
+                } catch (Exception e) {
+                    pickerVisibleItemsCount = (int) options.getDouble(PICKER_ITEMS_VISIBLE_COUNT);
+                }
+
+                if(pickerVisibleItemsCount %2 ==0){
+                    pickerVisibleItemsCount++;
+                }
+            }
+
             ReadableArray pickerData = options.getArray(PICKER_DATA);
 
             int pickerViewHeight;
-            String name = pickerData.getType(0).name();
+            String name = "";
+            try {
+                name = pickerData.getType(0).name();
+            } catch(ArrayIndexOutOfBoundsException aioobe) {
+                //Fix-it: it may throw java.lang.ArrayIndexOutOfBoundsException: length=0; index=0
+                //Cannot find out the reason. So just prevent it to crash the application.
+                aioobe.printStackTrace();
+            }
             switch (name) {
                 case "Map":
                     curStatus = 1;
@@ -313,6 +341,7 @@ public class PickerViewModule extends ReactContextBaseJavaModule implements Life
                     pickerViewLinkage.setPickerData(pickerData, weights);
                     pickerViewLinkage.setTextColor(pickerTextColor);
                     pickerViewLinkage.setTextSize(pickerTextSize);
+                    pickerViewLinkage.setItemsVisibleCount(pickerVisibleItemsCount);
                     pickerViewLinkage.setTextEllipsisLen(pickerTextEllipsisLen);
                     pickerViewLinkage.setIsLoop(isLoop);
 
@@ -320,7 +349,6 @@ public class PickerViewModule extends ReactContextBaseJavaModule implements Life
                         @Override
                         public void onSelected(ArrayList<ReturnData> selectedList) {
                             returnData = selectedList;
-                            commonEvent(EVENT_KEY_SELECTED);
                         }
                     });
                     pickerViewHeight = pickerViewLinkage.getViewHeight();
@@ -333,6 +361,7 @@ public class PickerViewModule extends ReactContextBaseJavaModule implements Life
                     pickerViewAlone.setPickerData(pickerData, weights);
                     pickerViewAlone.setTextColor(pickerTextColor);
                     pickerViewAlone.setTextSize(pickerTextSize);
+                    pickerViewAlone.setItemsVisibleCount(pickerVisibleItemsCount);
                     pickerViewAlone.setTextEllipsisLen(pickerTextEllipsisLen);
                     pickerViewAlone.setIsLoop(isLoop);
 
@@ -394,22 +423,19 @@ public class PickerViewModule extends ReactContextBaseJavaModule implements Life
                 Window window = dialog.getWindow();
                 if (window != null) {
                     if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        window.setType(WindowManager.LayoutParams.TYPE_SYSTEM_ALERT);
-                    }else{
-                        if (MIUIUtils.isMIUI()) {
-                            layoutParams.type = WindowManager.LayoutParams.TYPE_APPLICATION;
-                        }else {
-                            //layoutParams.type = WindowManager.LayoutParams.TYPE_TOAST;
-                        }
+                        window.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY);
+                    } else if (MIUIUtils.isMIUI()) {
+                        layoutParams.type = WindowManager.LayoutParams.TYPE_APPLICATION;
                     }
-                    layoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
-                    layoutParams.format = PixelFormat.TRANSPARENT;
-                    layoutParams.windowAnimations = R.style.PickerAnim;
-                    layoutParams.width = WindowManager.LayoutParams.MATCH_PARENT;
-                    layoutParams.height = height;
-                    layoutParams.gravity = Gravity.BOTTOM;
-                    window.setAttributes(layoutParams);   
                 }
+                layoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+                layoutParams.format = PixelFormat.TRANSPARENT;
+                layoutParams.windowAnimations = R.style.PickerAnim;
+                layoutParams.width = WindowManager.LayoutParams.MATCH_PARENT;
+                layoutParams.height = height;
+                layoutParams.gravity = Gravity.BOTTOM;
+                window.setAttributes(layoutParams);
+
             } else {
                 dialog.dismiss();
                 dialog.setContentView(view);
